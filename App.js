@@ -83,6 +83,7 @@ const dashDistance = 7.;
 let dashUses = 2; // Allow for two dashes
 const mapWidth = 30, mapHeight = 30;
 let projectiles = [];
+const raycaster = new THREE.Raycaster();
 
 init();
 animate();
@@ -357,7 +358,7 @@ function animatePlane(x, y, z, targetWidth, targetHeight, duration) {
     plane.position.set(x, y, z);
     plane.scale.set(0,0);
     scene.add(plane);
-    plane.quaternion.copy(camera.quaternion);
+    plane.quaternion.copy(yawObject.quaternion);
     // Animate the plane to the target size and back to nothing
     gsap.timeline()
         .to(plane.scale, { x: targetWidth, y: targetHeight, duration: duration / 2 })
@@ -365,18 +366,24 @@ function animatePlane(x, y, z, targetWidth, targetHeight, duration) {
 }
 
 function updateProjectiles() {
+    const delta = clock.getDelta();
     projectiles.forEach((projectile, index) => {
-        const moveDistance = projectileSpeed * clock.getDelta();
+        const moveDistance = projectileSpeed * delta;
         projectile.mesh.position.addScaledVector(projectile.direction, moveDistance);
 
-        // Check collision with scene objects
-        scene.children.forEach(object => {
-            if (object !== projectile.mesh && object.name != "proj" && checkObjectsCollision(projectile.mesh, object)) {
-                animatePlane(projectile.mesh.position.x, projectile.mesh.position.y, projectile.mesh.position.z, 1, 1, 1);
-                scene.remove(projectile.mesh);
-                projectiles.splice(index, 1);
-            }
-        });
+        // Update the raycaster to check for intersections
+        raycaster.set(projectile.mesh.position, projectile.direction);
+
+        // Find intersections
+        const intersects = raycaster.intersectObjects(scene.children, true);
+        if (intersects.length > 0 && intersects[0].distance < moveDistance) {
+            // Handle collision
+            const collisionPoint = intersects[0].point;
+            const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(yawObject.quaternion); 
+            animatePlane(collisionPoint.x - forward.x * 0.1, collisionPoint.y  - forward.y * 0.1, collisionPoint.z  - forward.z * 0.1, 1, 1, 1);
+            scene.remove(projectile.mesh);
+            projectiles.splice(index, 1);
+        }
 
         // Remove projectile if out of bounds
         if (projectile.mesh.position.y < -10) {
