@@ -7,11 +7,30 @@
     <style>
         body { margin: 0; }
         canvas { display: block; }
+        #stats { position: absolute; top: 0; left: 0; }
+        .centered-dot
+        {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 5px;
+            height: 5px;
+            background-color: black;
+            border-radius: 50%;
+        }
     </style>
 </head>
 <body>
-    
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
-    <script type="text/javascript" src="App.js"></script>
+    <div class="centered-dot"></div>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://cdn.skypack.dev/three@0.132.2",
+                "three/examples/jsm/": "https://cdn.skypack.dev/three@0.132.2/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="App.js"></script>
 </body>
 </html>
