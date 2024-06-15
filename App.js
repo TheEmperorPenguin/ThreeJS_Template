@@ -72,6 +72,17 @@ let directionalLight, ambientLight;
 let movementSpeed = 10.;
 const keyState = {};
 let pitchObject, yawObject;
+let lastShootTime = 0;
+
+let isJumping = 0;
+let jumpVelocity = 0;
+const gravity = 0.005;
+const initialJumpVelocity = 0.20;
+let isGrounded = true;
+const dashDistance = 7.; 
+let dashUses = 2; // Allow for two dashes
+const mapWidth = 30, mapHeight = 30;
+let projectiles = [];
 
 init();
 animate();
@@ -129,8 +140,8 @@ function init() {
     scene.add(ambientLight);
     scene.add(directionalLight);
 
-    for (let i = 0; i < 10; i++) {
-        for (let j = 0; j < 10; j++) {
+    for (let i = 0; i < mapWidth; i++) {
+        for (let j = 0; j < mapHeight; j++) {
             createRandomCube(i - 5, j - 5, 10);
         }
     }
@@ -155,14 +166,15 @@ function createRandomCube(i, j, size) {
 function initControls() {
     document.addEventListener('keydown', (event) => {
         keyState[event.code] = true;
+        onKeyDown(event);
     });
     document.addEventListener('keyup', (event) => {
+        onKeyUp(event);
         keyState[event.code] = false;
     });
 
     document.addEventListener('mousemove', onMouseMove);
-
-    // Lock the pointer for better FPS experience
+    document.addEventListener('mousedown', onMouseDown);
     document.body.addEventListener('click', () => {
         document.body.requestPointerLock();
     });
@@ -179,48 +191,49 @@ function onMouseMove(event) {
     }
 }
 
+function checkObjectsCollision(object1, object2) {
+    const box1 = new THREE.Box3().setFromObject(object1);
+    const box2 = new THREE.Box3().setFromObject(object2);
+
+    return box1.intersectsBox(box2);
+}
+
 function checkCollision() {
-    const collisionMargin = 1.0; // Adjust this margin as needed
+    const collisionMargin = 1.0;
 
     // Get the center of the yawObject (camera's position)
     const cameraPosition = yawObject.position.clone();
 
-    // Create a larger bounding box around the camera's position
+    // Create a bounding box around the camera's position
     const objectBB = new THREE.Box3(
         cameraPosition.clone().add(new THREE.Vector3(-collisionMargin, -collisionMargin, -collisionMargin)),
         cameraPosition.clone().add(new THREE.Vector3(collisionMargin, collisionMargin, collisionMargin))
     );
 
-    // Iterate over all objects in the scene
+    // Check for collisions with other objects in the scene
     for (let i = 0; i < scene.children.length; i++) {
         const object = scene.children[i];
 
-        // Check for collision with each object that is not the camera itself
-        if (object !== yawObject) {
+        if (object !== yawObject && object.name != 'proj') {
             const otherObjectBB = new THREE.Box3().setFromObject(object);
 
-            // Check if the camera's extended bounding box intersects with the object's bounding box
+            // Detect collisions
             if (objectBB.intersectsBox(otherObjectBB)) {
-                // Handle collision here, for example, stop camera movement
-                return true; // Collision detected
+                return true;
             }
         }
     }
 
-    return false; // No collision detected
+    return false;
 }
 
 function updateCameraPosition() {
     const moveDistance = movementSpeed * clock.getDelta();
     let oldPosition = yawObject.position.clone();
-    const gravity = .1;
-    if (keyState['KeyE']) {
-        movementSpeed *= 1.01;
-    }
-    if (keyState['KeyQ']) {
-        movementSpeed /= 1.01;
-    }
 
+    if (keyState['KeyE']) {
+        shootProjectile();
+    }
     if (keyState['KeyW']) {
         yawObject.translateZ(-moveDistance);
     }
@@ -233,20 +246,144 @@ function updateCameraPosition() {
     if (keyState['KeyD']) {
         yawObject.translateX(moveDistance);
     }
-    if (keyState['Space']) {
-        yawObject.translateY(moveDistance);
+
+    if (keyState['Space'] && (isGrounded || isJumping === 1)) {
+        isJumping += 1;
+        jumpVelocity = initialJumpVelocity;
+        isGrounded = false;
     }
-    if (keyState['ShiftLeft']) {
-        yawObject.translateY(-moveDistance);
+
+    // Handle jumping and falling
+    if (isJumping > 0 && isJumping < 3) {
+        yawObject.position.y += jumpVelocity;
+        jumpVelocity -= gravity; // Gravity reduces the upward velocity
+
+        // Check if peak of jump is reached
+        if (jumpVelocity <= 0) {
+            if (isJumping === 2) {
+                isJumping = 0; // End second jump
+            } else {
+                isJumping = 1; // End first jump, allow for potential second jump
+            }
+        }
+    } else {
+        if (!isGrounded) {
+            yawObject.position.y -= jumpVelocity; // Apply downward velocity
+            jumpVelocity += gravity; // Gravity increases the downward velocity
+        }
     }
+
+    // Check for collisions and ground
     if (checkCollision()) {
         yawObject.position.copy(oldPosition); // Revert to the old position if there's a collision
+        isGrounded = true; // Assume we hit the ground
+        jumpVelocity = 0; // Reset jump velocity
+        isJumping = 0; // Reset jump state
+        dashUses = 2; // Reset dash uses when grounded
+    } else {
+        isGrounded = false; // We are in the air
     }
-    oldPosition = yawObject.position.clone();
-    yawObject.translateY(-gravity);
-    if (checkCollision()) {
-        yawObject.position.copy(oldPosition); // Revert to the old position if there's a collision
+}
+
+function onKeyDown(event) {
+    keyState[event.code] = true;
+
+    // Double movement speed when Shift key is pressed
+    if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        movementSpeed = 20.;
     }
+}
+
+function onKeyUp(event) {
+    keyState[event.code] = false;
+
+    // Restore normal movement speed when Shift key is released
+    if (event.code === 'ShiftLeft' || event.code === 'ShiftRight') {
+        movementSpeed = 10.;
+    }
+}
+
+function onMouseDown(event) {
+    if (event.button === 0) { // Left mouse button
+        moveCameraForward();
+    }
+}
+
+// Move the camera forward in the direction it is facing
+function moveCameraForward() {
+    if (dashUses > 0) {
+        jumpVelocity = 0;
+        const direction = new THREE.Vector3();
+        camera.getWorldDirection(direction);
+        yawObject.position.addScaledVector(direction, dashDistance);
+        dashUses -= 1;
+    }
+}
+
+const projectileSpeed = 1000;
+
+function shootProjectile() {
+    const currentTime = Date.now();
+    if (currentTime - lastShootTime < 100) {
+        return;
+    }
+
+    lastShootTime = currentTime;
+
+    const projectileGeometry = new THREE.BoxGeometry(0.2, 0.2, 0.2);
+    const projectileMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+    const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
+    projectile.name = 'proj';
+
+    const direction = new THREE.Vector3();
+    camera.getWorldDirection(direction);
+
+    projectile.position.copy(yawObject.position);
+    scene.add(projectile);
+
+    projectiles.push({
+        mesh: projectile,
+        direction: direction.clone()
+    });
+}
+
+function animatePlane(x, y, z, targetWidth, targetHeight, duration) {
+    const planeGeometry = new THREE.PlaneGeometry(1, 1); // Start with zero width and height
+    const planeMaterial = new THREE.MeshBasicMaterial({ color: 0xff4400, side: THREE.DoubleSide });
+
+    const plane = new THREE.Mesh(planeGeometry, planeMaterial);
+
+    // Set the initial position of the plane
+    plane.position.set(x, y, z);
+    plane.scale.set(0,0);
+    scene.add(plane);
+    plane.quaternion.copy(camera.quaternion);
+    // Animate the plane to the target size and back to nothing
+    gsap.timeline()
+        .to(plane.scale, { x: targetWidth, y: targetHeight, duration: duration / 2 })
+        .to(plane.scale, { x: 0, y: 0, duration: duration / 2, onComplete: () => scene.remove(plane) });
+}
+
+function updateProjectiles() {
+    projectiles.forEach((projectile, index) => {
+        const moveDistance = projectileSpeed * clock.getDelta();
+        projectile.mesh.position.addScaledVector(projectile.direction, moveDistance);
+
+        // Check collision with scene objects
+        scene.children.forEach(object => {
+            if (object !== projectile.mesh && object.name != "proj" && checkObjectsCollision(projectile.mesh, object)) {
+                animatePlane(projectile.mesh.position.x, projectile.mesh.position.y, projectile.mesh.position.z, 1, 1, 1);
+                scene.remove(projectile.mesh);
+                projectiles.splice(index, 1);
+            }
+        });
+
+        // Remove projectile if out of bounds
+        if (projectile.mesh.position.y < -10) {
+            scene.remove(projectile.mesh);
+            projectiles.splice(index, 1);
+        }
+    });
 }
 
 // Handle window resize
@@ -261,6 +398,7 @@ function animate() {
     stats.begin();
     requestAnimationFrame(animate);
     updateCameraPosition();
+    updateProjectiles();
     renderer.render(scene, camera);
     stats.end();
 }
