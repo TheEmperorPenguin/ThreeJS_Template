@@ -1,41 +1,8 @@
 import * as THREE from 'three';
 import Stats from 'https://cdnjs.cloudflare.com/ajax/libs/stats.js/17/Stats.js';
-
-// import ThreeJSApp from './ThreeWrap.js'; import example
-
-/**
- * ThreeJSApp Class Variables:
- * - scene: THREE.Scene
- * - camera: THREE.PerspectiveCamera
- * - renderer: THREE.WebGLRenderer
- * - stats: Stats
- * - yawObject: THREE.Object3D
- * - pitchObject: THREE.Object3D
- * - clock: THREE.Clock
- * - keyState: Object
- * - isAnimating : Boolean
- * 
- * ThreeJSApp Class Methods:
- * - constructor()
- * - initScene()
- * - initCamera()
- * - initRenderer()
- * - initStats()
- * - initLights()
- * - initObjects()
- * - initControls()
- * - onKeyDown(event)
- * - onKeyUp(event)
- * - onMouseMove(event)
- * - onClick()
- * - updateCameraPosition()
- * - onWindowResize()
- * - pause()
- * - resume()
- * - animate()
- * - cleanup()
-*/
-
+import { EffectComposer } from 'three/examples/jsm/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/examples/jsm/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/examples/jsm/postprocessing/UnrealBloomPass.js';
 
 class ThreeJSApp {
     constructor(defaultScene = false) {
@@ -57,6 +24,8 @@ class ThreeJSApp {
             this.initFunction = this.defaultInit.bind(this);
             this.updateFunction = this.defaultUpdate.bind(this);
         }
+
+        this.initPostProcessing();
     }
 
     initScene() {
@@ -64,7 +33,7 @@ class ThreeJSApp {
     }
 
     initCamera() {
-        this.camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(90, window.innerWidth / window.innerHeight, 0.1, 2000);
         this.yawObject = new THREE.Object3D();
         this.pitchObject = new THREE.Object3D();
         this.yawObject.add(this.pitchObject);
@@ -94,12 +63,11 @@ class ThreeJSApp {
     }
 
     initControls() {
-
         this.boundOnKeyDown = this.onKeyDown.bind(this);
         this.boundOnKeyUp = this.onKeyUp.bind(this);
         this.boundOnMouseMove = this.onMouseMove.bind(this);
         this.boundOnClick = this.onClick.bind(this);
-    
+
         document.addEventListener('keydown', this.boundOnKeyDown);
         document.addEventListener('keyup', this.boundOnKeyUp);
         document.addEventListener('mousemove', this.boundOnMouseMove);
@@ -167,6 +135,20 @@ class ThreeJSApp {
         this.camera.aspect = window.innerWidth / window.innerHeight;
         this.camera.updateProjectionMatrix();
         this.renderer.setSize(window.innerWidth, window.innerHeight);
+        this.composer.setSize(window.innerWidth, window.innerHeight); // Update the composer size
+    }
+
+    initPostProcessing() {
+        const renderScene = new RenderPass(this.scene, this.camera);
+
+        this.bloomPass = new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 1.5, 0.4, 0.85);
+        this.bloomPass.threshold = 0;
+        this.bloomPass.strength = 1.5;
+        this.bloomPass.radius = 1.0;
+
+        this.composer = new EffectComposer(this.renderer);
+        this.composer.addPass(renderScene);
+        this.composer.addPass(this.bloomPass);
     }
 
     pause() {
@@ -185,12 +167,11 @@ class ThreeJSApp {
     }
 
     animateLoop() {
-        if (!this.isAnimating)
-            return;
+        if (!this.isAnimating) return;
         this.stats.begin();
         this.updateCameraPosition();
         this.updateFunction(); // Call the custom update function
-        this.renderer.render(this.scene, this.camera);
+        this.composer.render(); // Use the composer for rendering with bloom effect
         this.stats.end();
         this.animationId = requestAnimationFrame(this.animateLoop.bind(this));
     }
