@@ -10,10 +10,10 @@ const minRadius = 80;
 const maxRadius = 120;
 
 const planetInfos = [
-    { name: 'Mercury', radius: 0.1, distance: 5, color: 0xd8d8d8 },
-    { name: 'Venus', radius: 0.3, distance: 8, color: 0xffff00 },
-    { name: 'Earth', radius: 0.4, distance: 11, color: 0x0000ff },
-    { name: 'Mars', radius: 0.3, distance: 14, color: 0xff0000 },
+    { name: 'Mercury', radius: 0.4, distance: 5, color: 0xd8d8d8 },
+    { name: 'Venus', radius: 0.6, distance: 8, color: 0xffff00 },
+    { name: 'Earth', radius: 0.7, distance: 11, color: 0x0000ff },
+    { name: 'Mars', radius: 0.6, distance: 14, color: 0xff0000 },
     { name: 'Jupiter', radius: 0.9, distance: 18, color: 0xff9900 },
     { name: 'Saturn', radius: 1.7, distance: 25, color: 0xffcc99 },
     { name: 'Uranus', radius: 1.6, distance: 30, color: 0x66ccff },
@@ -97,7 +97,7 @@ function createRandomPoints(nbrOfPoints, minRadius, maxRadius) {
 
 function customInit() {
     // Create a sun
-    const sunGeometry = new THREE.SphereGeometry(2, 32, 32);
+    const sunGeometry = new THREE.SphereGeometry(3, 32, 32);
     const sunMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 });
     const sun = new THREE.Mesh(sunGeometry, sunMaterial);
     sun.position.set(0, 0, 0);
